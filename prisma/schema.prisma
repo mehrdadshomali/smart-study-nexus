@@ -1,0 +1,431 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+// ==================== USER & AUTH ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  folders       Folder[]
+  notes         Note[]
+  questions     Question[]
+  flashcards    Flashcard[]
+  files         File[]
+  quizzes       Quiz[]
+  quizAttempts  QuizAttempt[]
+  studyStats    StudyStats[]
+  activities    Activity[]
+  chatSessions  ChatSession[]
+}
+
+// ==================== FOLDER SYSTEM ====================
+
+model Folder {
+  id          String    @id @default(cuid())
+  name        String
+  color       String?   @default("#6366f1")
+  icon        String?
+  parentId    String?
+  userId      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  parent      Folder?   @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[]  @relation("FolderHierarchy")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes       Note[]
+  questions   Question[]
+  flashcards  Flashcard[]
+  files       File[]
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+// ==================== NOTES & MIND MAP ====================
+
+model Note {
+  id          String    @id @default(cuid())
+  title       String
+  content     Json      // TipTap JSON format
+  summary     String?   // AI-generated summary
+  folderId    String?
+  userId      String
+  
+  // Mind Map position
+  positionX   Float?
+  positionY   Float?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  folder      Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  tags        NoteTag[]
+  
+  // Mind Map links
+  linksFrom   NoteLink[] @relation("SourceNote")
+  linksTo     NoteLink[] @relation("TargetNote")
+
+  @@index([userId])
+  @@index([folderId])
+}
+
+model NoteLink {
+  id          String    @id @default(cuid())
+  sourceId    String
+  targetId    String
+  label       String?
+  linkType    LinkType  @default(MANUAL)
+  createdAt   DateTime  @default(now())
+
+  source      Note      @relation("SourceNote", fields: [sourceId], references: [id], onDelete: Cascade)
+  target      Note      @relation("TargetNote", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+enum LinkType {
+  MANUAL
+  TAG
+  FOLDER
+  AI_SUGGESTED
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String?
+  notes     NoteTag[]
+}
+
+model NoteTag {
+  noteId    String
+  tagId     String
+  note      Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+// ==================== FILES & MEDIA ====================
+
+model File {
+  id          String    @id @default(cuid())
+  name        String
+  type        FileType
+  mimeType    String
+  size        Int
+  url         String
+  storagePath String
+  folderId    String?
+  userId      String
+  
+  // OCR
+  ocrText     String?
+  ocrStatus   OCRStatus @default(PENDING)
+  
+  // PDF processing
+  pageCount   Int?
+  isProcessed Boolean   @default(false)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  folder      Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  embeddings  Embedding[]
+  chatSessions ChatSession[]
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([type])
+}
+
+enum FileType {
+  IMAGE
+  PDF
+  DOCUMENT
+  AUDIO
+  OTHER
+}
+
+enum OCRStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ==================== PDF-RAG EMBEDDINGS ====================
+
+model Embedding {
+  id          String    @id @default(cuid())
+  fileId      String
+  chunkIndex  Int
+  content     String    // Text chunk
+  pageNumber  Int?
+  embedding   Unsupported("vector(1536)")?
+  createdAt   DateTime  @default(now())
+
+  file        File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId])
+}
+
+model ChatSession {
+  id          String    @id @default(cuid())
+  fileId      String
+  userId      String
+  title       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  file        File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+
+  @@index([userId])
+  @@index([fileId])
+}
+
+model ChatMessage {
+  id          String      @id @default(cuid())
+  sessionId   String
+  role        MessageRole
+  content     String
+  sources     Json?       // Page references
+  createdAt   DateTime    @default(now())
+
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+// ==================== QUESTIONS ====================
+
+model Question {
+  id              String       @id @default(cuid())
+  type            QuestionType @default(MULTIPLE_CHOICE)
+  questionText    String
+  questionImage   String?
+  options         Json?        // ["A", "B", "C", "D"]
+  correctAnswer   String
+  explanation     String?
+  difficulty      Difficulty   @default(MEDIUM)
+  
+  folderId        String?
+  noteId          String?
+  userId          String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  folder          Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  note            Note?        @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizQuestions   QuizQuestion[]
+  attempts        QuestionAttempt[]
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([noteId])
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  FILL_BLANK
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ==================== FLASHCARDS (Spaced Repetition) ====================
+
+model Flashcard {
+  id              String    @id @default(cuid())
+  front           String    // Question side
+  back            String    // Answer side
+  frontImage      String?
+  backImage       String?
+  
+  // SM-2 Algorithm fields
+  easeFactor      Float     @default(2.5)
+  interval        Int       @default(0)    // Days
+  repetitions     Int       @default(0)
+  nextReviewDate  DateTime  @default(now())
+  lastReviewDate  DateTime?
+  
+  folderId        String?
+  userId          String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  folder          Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews         FlashcardReview[]
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([nextReviewDate])
+}
+
+model FlashcardReview {
+  id            String    @id @default(cuid())
+  flashcardId   String
+  quality       Int       // 0-5 rating
+  reviewedAt    DateTime  @default(now())
+
+  flashcard     Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@index([flashcardId])
+}
+
+// ==================== QUIZ SYSTEM ====================
+
+model Quiz {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  timeLimit   Int?      // Minutes
+  userId      String
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions   QuizQuestion[]
+  attempts    QuizAttempt[]
+
+  @@index([userId])
+}
+
+model QuizQuestion {
+  quizId      String
+  questionId  String
+  order       Int
+
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([quizId, questionId])
+}
+
+model QuizAttempt {
+  id              String    @id @default(cuid())
+  quizId          String
+  userId          String
+  score           Float
+  totalQuestions  Int
+  correctAnswers  Int
+  timeSpent       Int?      // Seconds
+  completedAt     DateTime  @default(now())
+
+  quiz            Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers         QuestionAttempt[]
+
+  @@index([userId])
+  @@index([quizId])
+}
+
+model QuestionAttempt {
+  id              String       @id @default(cuid())
+  questionId      String
+  quizAttemptId   String?
+  userAnswer      String
+  isCorrect       Boolean
+  timeSpent       Int?
+  attemptedAt     DateTime     @default(now())
+
+  question        Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  quizAttempt     QuizAttempt? @relation(fields: [quizAttemptId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+// ==================== GAMIFICATION ====================
+
+model Activity {
+  id          String       @id @default(cuid())
+  userId      String
+  type        ActivityType
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum ActivityType {
+  NOTE_CREATED
+  NOTE_EDITED
+  QUESTION_ANSWERED
+  FLASHCARD_REVIEWED
+  QUIZ_COMPLETED
+  FILE_UPLOADED
+  STREAK_ACHIEVED
+}
+
+model StudyStats {
+  id                  String    @id @default(cuid())
+  userId              String
+  date                DateTime  @db.Date
+  studyMinutes        Int       @default(0)
+  notesCreated        Int       @default(0)
+  questionsAnswered   Int       @default(0)
+  correctAnswers      Int       @default(0)
+  flashcardsReviewed  Int       @default(0)
+  currentStreak       Int       @default(0)
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+// ==================== VOICE NOTES ====================
+
+model VoiceNote {
+  id            String    @id @default(cuid())
+  audioUrl      String
+  storagePath   String
+  transcription String?
+  duration      Int       // Seconds
+  status        VoiceStatus @default(PENDING)
+  userId        String
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum VoiceStatus {
+  PENDING
+  TRANSCRIBING
+  COMPLETED
+  FAILED
+}
