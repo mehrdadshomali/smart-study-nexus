@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png" alt="Smart Study Nexus" width="120" height="120" />
+  <img src="public/logo.svg" alt="Smart Study Nexus" width="120" height="120" />
 </p>
 
 <h1 align="center">🎓 Smart Study Nexus</h1>
