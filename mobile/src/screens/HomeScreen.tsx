@@ -37,14 +37,6 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.greeting}>{greeting} 👋</Text>
           <Text style={styles.subtitle}>Bugün ne öğrenmek istersin?</Text>
         </View>
-        <TouchableOpacity style={styles.avatarButton}>
-          <LinearGradient
-            colors={[colors.primary, colors.primaryDark]}
-            style={styles.avatar}
-          >
-            <Text style={styles.avatarText}>M</Text>
-          </LinearGradient>
-        </TouchableOpacity>
       </View>
 
       {/* Quick Stats */}

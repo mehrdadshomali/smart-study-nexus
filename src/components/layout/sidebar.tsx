@@ -44,8 +44,8 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-700">
+      {/* Header - Fixed at top */}
+      <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
         {!collapsed && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
             Smart Study
@@ -63,8 +63,8 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      {/* Navigation - Scrollable */}
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
         {navItems.map((item) => (
           <Link
             key={item.href}
@@ -101,9 +101,9 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Footer */}
+      {/* Footer - Fixed at bottom */}
       {!collapsed && (
-        <div className="p-4 border-t border-slate-700">
+        <div className="flex-shrink-0 p-4 border-t border-slate-700 sticky bottom-0 bg-slate-900">
           <Button className="w-full bg-indigo-600 hover:bg-indigo-700">
             <PlusIcon className="h-4 w-4 mr-2" />
             Yeni Not
